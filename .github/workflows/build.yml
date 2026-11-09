@@ -48,28 +48,17 @@ jobs:
           cd kernel
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
           # trace 头 TRACE_INCLUDE_PATH=. 需要各自目录；相机/音频子树互相 include 需要整棵子树
-          # 1) 所有 *_trace.h 所在目录
-          # 2) 所有 TRACE_INCLUDE_FILE 声明的私有头文件所在目录（如 tracer_pkt_private.h）
-          # 3) 相机 / 音频 / 蓝牙 整棵子树
+          # 精确最小集合（避免 -I 过多导致 trace.h 等通用名头文件互相遮蔽）
           TRACEHDRS=$(grep -rhoE 'TRACE_INCLUDE_FILE[[:space:]]+[A-Za-z0-9_.]+' --include='*.h' --include='*.c' drivers techpack 2>/dev/null | awk '{print $2}' | sort -u)
-          EXTRA=$( { find drivers techpack include arch -name '*_trace.h' -printf '-I%h\n' 2>/dev/null
-                     for hd in $TRACEHDRS; do find drivers techpack \( -name "$hd" -o -name "$hd.h" \) -printf '-I%h\n' 2>/dev/null | head -1; done
-                     find drivers/soc/qcom -type d -printf '-I%p\n' 2>/dev/null
-                     find drivers/platform/msm -type d -printf '-I%p\n' 2>/dev/null
-                     find drivers/usb -type d -printf '-I%p\n' 2>/dev/null
-                     find drivers/gpu/drm/msm -type d -printf '-I%p\n' 2>/dev/null
-                     find drivers/media -type d -printf '-I%p\n' 2>/dev/null
-                     find drivers/power -type d -printf '-I%p\n' 2>/dev/null
-                     find drivers/input -type d -printf '-I%p\n' 2>/dev/null
-                     find drivers/slimbus -type d -printf '-I%p\n' 2>/dev/null
-                     find drivers/iommu -type d -printf '-I%p\n' 2>/dev/null
-                     find sound -type d -printf '-I%p\n' 2>/dev/null
-                     find net -type d -printf '-I%p\n' 2>/dev/null
-                     find drivers/media/platform/msm/camera -type d -printf '-I%p\n' 2>/dev/null
-                     find techpack/audio -type d -printf '-I%p\n' 2>/dev/null
-                     find drivers/bluetooth -type d -printf '-I%p\n' 2>/dev/null; } | sort -u | tr '\n' ' ' )
-          echo "include dirs: $(echo $EXTRA | wc -w)"
-          make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
+          EXTRA=""
+          for hd in $TRACEHDRS; do
+            d=$(find drivers techpack \( -name "$hd" -o -name "$hd.h" \) -printf '%h\n' 2>/dev/null | head -1)
+            [ -n "$d" ] && EXTRA="$EXTRA -I$d"
+          done
+          EXTRA="$EXTRA -Itechpack/audio/asoc -Itechpack/audio/asoc/codecs"
+          EXTRA="$EXTRA -Idrivers/usb/gadget -Idrivers/media/platform/msm/camera/cam_core"
+          EXTRA=$(echo $EXTRA | tr ' ' '\n' | sort -u | tr '\n' ' ')
+          echo "include dirs: $(echo $EXTRA | wc -w)"          make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
           ls -l arch/arm64/boot/Image
           df -h /
       - uses: actions/upload-artifact@v4
