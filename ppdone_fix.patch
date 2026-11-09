@@ -1,0 +1,87 @@
+diff --git a/Makefile b/Makefile
+index fbd4dc935..644308841 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,6 +1,6 @@
+ VERSION = 4
+ PATCHLEVEL = 9
+-SUBLEVEL = 227
++SUBLEVEL = 65
+ EXTRAVERSION =
+ NAME = Roaring Lionus
+ 
+diff --git a/drivers/gpu/drm/msm/sde/sde_encoder_phys.h b/drivers/gpu/drm/msm/sde/sde_encoder_phys.h
+index d5e9f4ac1..49bfcb74b 100644
+--- a/drivers/gpu/drm/msm/sde/sde_encoder_phys.h
++++ b/drivers/gpu/drm/msm/sde/sde_encoder_phys.h
+@@ -16,6 +16,7 @@
+ #define __SDE_ENCODER_PHYS_H__
+ 
+ #include <linux/jiffies.h>
++#include <linux/hrtimer.h>
+ #include <linux/sde_rsc.h>
+ 
+ #include "sde_kms.h"
+@@ -375,6 +376,7 @@ struct sde_encoder_phys_cmd {
+ 	ktime_t rd_ptr_timestamp;
+ 	atomic_t pending_vblank_cnt;
+ 	wait_queue_head_t pending_vblank_wq;
++	struct hrtimer ppdone_sim;
+ };
+ 
+ /**
+diff --git a/drivers/gpu/drm/msm/sde/sde_encoder_phys_cmd.c b/drivers/gpu/drm/msm/sde/sde_encoder_phys_cmd.c
+index 9a0d9735b..311736903 100644
+--- a/drivers/gpu/drm/msm/sde/sde_encoder_phys_cmd.c
++++ b/drivers/gpu/drm/msm/sde/sde_encoder_phys_cmd.c
+@@ -213,6 +213,30 @@ static void sde_encoder_phys_cmd_pp_tx_done_irq(void *arg, int irq_idx)
+ 	SDE_ATRACE_END("pp_done_irq");
+ }
+ 
++/*
++ * 死面板修复：面板坏了不会产生 PP_TX_DONE 中断，导致
++ *   release/retire fence 无人释放、pending_kickoff_cnt 永不递减
++ * -> SurfaceFlinger 只能等超时 -> 2~10fps。
++ * 这里用 hrtimer 按面板刷新率(60Hz)主动补发该中断。
++ */
++static enum hrtimer_restart sde_encoder_phys_cmd_ppdone_sim_fn(
++		struct hrtimer *t)
++{
++	struct sde_encoder_phys_cmd *cmd_enc =
++		container_of(t, struct sde_encoder_phys_cmd, ppdone_sim);
++	struct sde_encoder_phys *phys_enc = &cmd_enc->base;
++
++	if (!phys_enc->hw_pp || !phys_enc->parent ||
++			phys_enc->enable_state != SDE_ENC_ENABLED)
++		return HRTIMER_NORESTART;
++
++	if (atomic_read(&phys_enc->pending_kickoff_cnt) > 0)
++		sde_encoder_phys_cmd_pp_tx_done_irq(phys_enc, 0);
++
++	hrtimer_forward_now(t, ns_to_ktime(16666667));
++	return HRTIMER_RESTART;
++}
++
+ static void sde_encoder_phys_cmd_autorefresh_done_irq(void *arg, int irq_idx)
+ {
+ 	struct sde_encoder_phys *phys_enc = arg;
+@@ -970,6 +994,10 @@ static void sde_encoder_phys_cmd_enable(struct sde_encoder_phys *phys_enc)
+ 
+ 	sde_encoder_phys_cmd_enable_helper(phys_enc);
+ 	phys_enc->enable_state = SDE_ENC_ENABLED;
++
++	hrtimer_init(&cmd_enc->ppdone_sim, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
++	cmd_enc->ppdone_sim.function = sde_encoder_phys_cmd_ppdone_sim_fn;
++	hrtimer_start(&cmd_enc->ppdone_sim, ns_to_ktime(16666667), HRTIMER_MODE_REL);
+ }
+ 
+ static bool sde_encoder_phys_cmd_is_autorefresh_enabled(
+@@ -1068,6 +1096,8 @@ static void sde_encoder_phys_cmd_disable(struct sde_encoder_phys *phys_enc)
+ 		return;
+ 	}
+ 
++	hrtimer_cancel(&cmd_enc->ppdone_sim);
++
+ 	if (phys_enc->hw_pp->ops.enable_tearcheck)
+ 		phys_enc->hw_pp->ops.enable_tearcheck(phys_enc->hw_pp, false);
+ 	phys_enc->enable_state = SDE_ENC_DISABLED;
