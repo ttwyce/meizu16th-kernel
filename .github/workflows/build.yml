@@ -46,7 +46,9 @@ jobs:
           # 3) 相机 / 音频 / 蓝牙 整棵子树
           TRACEHDRS=$(grep -rhoE 'TRACE_INCLUDE_FILE[[:space:]]+[A-Za-z0-9_.]+' --include='*.h' --include='*.c' drivers techpack 2>/dev/null | awk '{print $2}' | sort -u)
           EXTRA=$( { find drivers techpack include arch -name '*_trace.h' -printf '-I%h\n' 2>/dev/null
-                     for hd in $TRACEHDRS; do find drivers techpack -name "$hd" -printf '-I%h\n' 2>/dev/null | head -1; done
+                     for hd in $TRACEHDRS; do find drivers techpack \( -name "$hd" -o -name "$hd.h" \) -printf '-I%h\n' 2>/dev/null | head -1; done
+                     find drivers/soc/qcom -type d -printf '-I%p\n' 2>/dev/null
+                     find drivers/platform/msm -type d -printf '-I%p\n' 2>/dev/null
                      find drivers/media/platform/msm/camera -type d -printf '-I%p\n' 2>/dev/null
                      find techpack/audio -type d -printf '-I%p\n' 2>/dev/null
                      find drivers/bluetooth -type d -printf '-I%p\n' 2>/dev/null; } | sort -u | tr '\n' ' ' )
