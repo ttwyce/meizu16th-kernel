@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Free disk space
         run: |
-          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk /opt/hostedtoolcache/CodeQL /usr/local/share/boost 2>/dev/null || true
+          sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL 2>/dev/null || true
           sudo apt-get clean
           df -h /
       - name: Install cross toolchain
@@ -30,9 +30,7 @@ jobs:
       - name: Fix missing transitive includes
         run: |
           cd kernel
-          # 4.9.227 树里 dwc3-msm.c 少了 pm_qos.h 的间接引入
-          grep -q "linux/pm_qos.h" drivers/usb/dwc3/dwc3-msm.c || \
-            sed -i '0,/^#include/s//#include <linux\/pm_qos.h>\n#include/' drivers/usb/dwc3/dwc3-msm.c
+          grep -q "linux/pm_qos.h" drivers/usb/dwc3/dwc3-msm.c || sed -i '0,/^#include/s//#include <linux\/pm_qos.h>\n#include/' drivers/usb/dwc3/dwc3-msm.c
           head -3 drivers/usb/dwc3/dwc3-msm.c
       - name: Configure
         run: |
@@ -41,20 +39,22 @@ jobs:
           ./scripts/config --disable BTFM_SLIM
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
           make olddefconfig
-          echo "=== kernelrelease ==="
           make -s kernelrelease
       - name: Build Image
         run: |
           cd kernel
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
-          # trace 头 TRACE_INCLUDE_PATH=. 需要各自目录；相机/音频子树互相 include 需要整棵子树
-          # 确定性固定目录（只包含实际报过错的位置，避免通用名 trace.h 被扫进来造成遮蔽）
-          EXTRA="-Idrivers/clk/qcom/mdss"
-          EXTRA="$EXTRA -Idrivers/soc/qcom"
-          EXTRA="$EXTRA -Itechpack/audio/asoc -Itechpack/audio/asoc/codecs"
-          EXTRA="$EXTRA -Idrivers/usb/gadget"
+          # trace 头：按 TRACE_INCLUDE_FILE 反查目录，但排除通用名 trace（会导致 regmap/trace.h 遮蔽）
+          TH=$(grep -rhoE 'TRACE_INCLUDE_FILE[[:space:]]+[A-Za-z0-9_.]+' --include='*.h' --include='*.c' drivers techpack 2>/dev/null | awk '{print $2}' | sed 's/\.h$//' | sort -u | grep -vx 'trace')
+          EXTRA=""
+          for h in $TH; do
+            d=$(find drivers techpack -name "$h.h" -printf '%h\n' 2>/dev/null | head -1)
+            [ -n "$d" ] && EXTRA="$EXTRA -I$d"
+          done
+          EXTRA="$EXTRA -Itechpack/audio/asoc -Itechpack/audio/asoc/codecs -Idrivers/usb/gadget"
           CAMINC=$(find drivers/media/platform/msm/camera -type d -printf '-I%p ' 2>/dev/null)
           EXTRA="$EXTRA $CAMINC"
+          EXTRA=$(echo $EXTRA | tr ' ' '\n' | sort -u | tr '\n' ' ')
           echo "include dirs: $(echo $EXTRA | wc -w)"
           make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
           ls -l arch/arm64/boot/Image
