@@ -27,25 +27,35 @@ jobs:
         run: |
           printf '#!/usr/bin/env python3\nimport os, sys\nos.execvp(sys.argv[1], sys.argv[1:])\n' > kernel/scripts/gcc-wrapper.py
           chmod +x kernel/scripts/gcc-wrapper.py
-      - name: Configure with native m1882 config
+      - name: Fix missing transitive includes
         run: |
           cd kernel
-          export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
-          ls arch/arm64/configs/vendor/meizu/
-          make sdm845_defconfig
-          cat arch/arm64/configs/vendor/meizu/m1882.config >> .config
+          grep -q "linux/pm_qos.h" drivers/usb/dwc3/dwc3-msm.c || sed -i '0,/^#include/s//#include <linux\/pm_qos.h>\n#include/' drivers/usb/dwc3/dwc3-msm.c
+      - name: Configure
+        run: |
+          cd kernel
+          cp ../device_config .config
           ./scripts/config --disable BTFM_SLIM
-          ./scripts/config --set-str LOCALVERSION "-perf"
-          ./scripts/config --disable LOCALVERSION_AUTO
+          export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
           make olddefconfig
           echo "=== kernelrelease (must be 4.9.65-perf+) ==="
           make -s kernelrelease
-          grep -E "^CONFIG_LOCALVERSION=|^CONFIG_MODVERSIONS|^CONFIG_SMP=|^CONFIG_PREEMPT=" .config
       - name: Build Image
         run: |
           cd kernel
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
-          make -j$(nproc) Image KCFLAGS="-Wno-error -Wno-error=implicit-function-declaration"
+          # 固定白名单（魅族原厂用 AndroidKernel.mk 自带这些路径，纯 kbuild 需要手工补）
+          EXTRA="-Idrivers/clk/qcom/mdss"
+          EXTRA="$EXTRA -Idrivers/soc/qcom"
+          EXTRA="$EXTRA -Idrivers/gpu/msm"
+          EXTRA="$EXTRA -Idrivers/usb/gadget"
+          EXTRA="$EXTRA -Itechpack/audio/asoc -Itechpack/audio/asoc/codecs"
+          EXTRA="$EXTRA -Idrivers/media/platform/msm/camera/cam_core"
+          EXTRA="$EXTRA -Idrivers/media/platform/msm/camera/cam_isp/isp_hw_mgr"
+          CAMINC=$(find drivers/media/platform/msm/camera -type d -printf '-I%p ' 2>/dev/null)
+          EXTRA="$EXTRA $CAMINC"
+          echo "include dirs: $(echo $EXTRA | wc -w)"
+          make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
           ls -l arch/arm64/boot/Image
           df -h /
       - uses: actions/upload-artifact@v4
