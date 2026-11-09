@@ -49,6 +49,15 @@ jobs:
                      for hd in $TRACEHDRS; do find drivers techpack \( -name "$hd" -o -name "$hd.h" \) -printf '-I%h\n' 2>/dev/null | head -1; done
                      find drivers/soc/qcom -type d -printf '-I%p\n' 2>/dev/null
                      find drivers/platform/msm -type d -printf '-I%p\n' 2>/dev/null
+                     find drivers/usb -type d -printf '-I%p\n' 2>/dev/null
+                     find drivers/gpu/drm/msm -type d -printf '-I%p\n' 2>/dev/null
+                     find drivers/media -type d -printf '-I%p\n' 2>/dev/null
+                     find drivers/power -type d -printf '-I%p\n' 2>/dev/null
+                     find drivers/input -type d -printf '-I%p\n' 2>/dev/null
+                     find drivers/slimbus -type d -printf '-I%p\n' 2>/dev/null
+                     find drivers/iommu -type d -printf '-I%p\n' 2>/dev/null
+                     find sound -type d -printf '-I%p\n' 2>/dev/null
+                     find net -type d -printf '-I%p\n' 2>/dev/null
                      find drivers/media/platform/msm/camera -type d -printf '-I%p\n' 2>/dev/null
                      find techpack/audio -type d -printf '-I%p\n' 2>/dev/null
                      find drivers/bluetooth -type d -printf '-I%p\n' 2>/dev/null; } | sort -u | tr '\n' ' ' )
