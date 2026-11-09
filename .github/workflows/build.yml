@@ -58,7 +58,8 @@ jobs:
           EXTRA="$EXTRA -Itechpack/audio/asoc -Itechpack/audio/asoc/codecs"
           EXTRA="$EXTRA -Idrivers/usb/gadget -Idrivers/media/platform/msm/camera/cam_core"
           EXTRA=$(echo $EXTRA | tr ' ' '\n' | sort -u | tr '\n' ' ')
-          echo "include dirs: $(echo $EXTRA | wc -w)"          make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
+          echo "include dirs: $(echo $EXTRA | wc -w)"
+          make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
           ls -l arch/arm64/boot/Image
           df -h /
       - uses: actions/upload-artifact@v4
