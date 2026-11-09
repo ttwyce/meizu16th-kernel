@@ -7,36 +7,26 @@ jobs:
     timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
-
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android/sdk/ndk /opt/hostedtoolcache/CodeQL /usr/local/share/boost 2>/dev/null || true
           sudo apt-get clean
           df -h /
-
       - name: Install cross toolchain
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq gcc-9-aarch64-linux-gnu g++-9-aarch64-linux-gnu \
-            libssl-dev libelf-dev device-tree-compiler bc bison flex
+          sudo apt-get install -y -qq gcc-9-aarch64-linux-gnu g++-9-aarch64-linux-gnu libssl-dev libelf-dev device-tree-compiler bc bison flex
           sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc-9 /usr/local/bin/aarch64-linux-gnu-gcc
           sudo ln -sf /usr/bin/aarch64-linux-gnu-g++-9 /usr/local/bin/aarch64-linux-gnu-g++
           aarch64-linux-gnu-gcc --version | head -1
-
       - name: Clone kernel source
         run: git clone --depth 1 -b topaz https://github.com/meizufuckers/android_kernel_meizu_sdm845.git kernel
-
       - name: Apply ppdone fix
-        run: |
-          cd kernel
-          git apply ../ppdone_fix.patch
-          git diff --stat
-
+        run: cd kernel && git apply ../ppdone_fix.patch && git diff --stat
       - name: Fix gcc-wrapper for python3
         run: |
           printf '#!/usr/bin/env python3\nimport os, sys\nos.execvp(sys.argv[1], sys.argv[1:])\n' > kernel/scripts/gcc-wrapper.py
           chmod +x kernel/scripts/gcc-wrapper.py
-
       - name: Configure
         run: |
           cd kernel
@@ -44,22 +34,21 @@ jobs:
           ./scripts/config --disable BTFM_SLIM
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
           make olddefconfig
-          echo "=== kernelrelease (must be 4.9.65-perf+) ==="
+          echo "=== kernelrelease ==="
           make -s kernelrelease
-          grep -E '^CONFIG_LOCALVERSION=|^CONFIG_MODVERSIONS|^CONFIG_SMP=|^CONFIG_PREEMPT=' .config
-          grep BTFM_SLIM .config || echo "BTFM_SLIM disabled OK"
-
       - name: Build Image
         run: |
           cd kernel
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
-          EXTRA=$(find drivers techpack include arch -name '*_trace.h' -printf '-I%h\n' 2>/dev/null | sort -u | tr '\n' ' ')
-          echo "trace include dirs: $(echo $EXTRA | wc -w)"
-          make -j$(nproc) Image \
-            KCFLAGS="$EXTRA -I$PWD/techpack/audio/asoc -I$PWD/techpack/audio/asoc/codecs -I$PWD/drivers/bluetooth"
+          # trace 头 TRACE_INCLUDE_PATH=. 需要各自目录；相机/音频子树互相 include 需要整棵子树
+          EXTRA=$( { find drivers techpack include arch -name '*_trace.h' -printf '-I%h\n' 2>/dev/null
+                     find drivers/media/platform/msm/camera -type d -printf '-I%p\n' 2>/dev/null
+                     find techpack/audio -type d -printf '-I%p\n' 2>/dev/null
+                     find drivers/bluetooth -type d -printf '-I%p\n' 2>/dev/null; } | sort -u | tr '\n' ' ' )
+          echo "include dirs: $(echo $EXTRA | wc -w)"
+          make -j$(nproc) Image KCFLAGS="$EXTRA"
           ls -l arch/arm64/boot/Image
           df -h /
-
       - uses: actions/upload-artifact@v4
         with:
           name: kernel-Image
