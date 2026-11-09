@@ -48,21 +48,14 @@ jobs:
           cd kernel
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
           # trace 头 TRACE_INCLUDE_PATH=. 需要各自目录；相机/音频子树互相 include 需要整棵子树
-          # 精确最小集合（避免 -I 过多导致 trace.h 等通用名头文件互相遮蔽）
-          TRACEHDRS=$(grep -rhoE 'TRACE_INCLUDE_FILE[[:space:]]+[A-Za-z0-9_.]+' --include='*.h' --include='*.c' drivers techpack 2>/dev/null | awk '{print $2}' | sort -u)
-          EXTRA=""
-          for hd in $TRACEHDRS; do
-            d=$(find drivers techpack \( -name "$hd" -o -name "$hd.h" \) -printf '%h\n' 2>/dev/null | head -1)
-            [ -n "$d" ] && EXTRA="$EXTRA -I$d"
-          done
+          # 确定性固定目录（只包含实际报过错的位置，避免通用名 trace.h 被扫进来造成遮蔽）
+          EXTRA="-Idrivers/clk/qcom/mdss"
+          EXTRA="$EXTRA -Idrivers/soc/qcom"
           EXTRA="$EXTRA -Itechpack/audio/asoc -Itechpack/audio/asoc/codecs"
           EXTRA="$EXTRA -Idrivers/usb/gadget"
-          # 相机树内部互相 include，需要整棵子树（不含通用名 trace.h，不会遮蔽）
           CAMINC=$(find drivers/media/platform/msm/camera -type d -printf '-I%p ' 2>/dev/null)
           EXTRA="$EXTRA $CAMINC"
-          EXTRA=$(echo $EXTRA | tr ' ' '\n' | sort -u | tr '\n' ' ')
-          echo "include dirs: $(echo $EXTRA | wc -w)"
-          make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
+          echo "include dirs: $(echo $EXTRA | wc -w)"          make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
           ls -l arch/arm64/boot/Image
           df -h /
       - uses: actions/upload-artifact@v4
