@@ -27,6 +27,13 @@ jobs:
         run: |
           printf '#!/usr/bin/env python3\nimport os, sys\nos.execvp(sys.argv[1], sys.argv[1:])\n' > kernel/scripts/gcc-wrapper.py
           chmod +x kernel/scripts/gcc-wrapper.py
+      - name: Fix missing transitive includes
+        run: |
+          cd kernel
+          # 4.9.227 树里 dwc3-msm.c 少了 pm_qos.h 的间接引入
+          grep -q "linux/pm_qos.h" drivers/usb/dwc3/dwc3-msm.c || \
+            sed -i '0,/^#include/s//#include <linux\/pm_qos.h>\n#include/' drivers/usb/dwc3/dwc3-msm.c
+          head -3 drivers/usb/dwc3/dwc3-msm.c
       - name: Configure
         run: |
           cd kernel
