@@ -51,7 +51,10 @@ jobs:
           EXTRA="$EXTRA -Idrivers/usb/gadget"
           EXTRA="$EXTRA -Itechpack/audio/asoc -Itechpack/audio/asoc/codecs"
           EXTRA="$EXTRA -Idrivers/platform/msm/ipa -Idrivers/platform/msm/ipa/ipa_v3 -Idrivers/platform/msm/ipa/test"
-          EXTRA="$EXTRA -Idrivers/media/platform/msm/camera/cam_core"
+                    # 一次性覆盖所有 *_trace.h 目录，但排除会遮蔽通用 trace.h 的 infiniband / base/regmap
+          TD=$(find drivers techpack -name '*_trace.h' -printf '%h\n' 2>/dev/null | sort -u | grep -v '/infiniband/' | grep -v '/base/regmap/')
+          for d in $TD; do EXTRA="$EXTRA -I$d"; done
+EXTRA="$EXTRA -Idrivers/media/platform/msm/camera/cam_core"
           EXTRA="$EXTRA -Idrivers/media/platform/msm/camera/cam_isp/isp_hw_mgr"
           CAMINC=$(find drivers/media/platform/msm/camera -type d -printf '-I%p ' 2>/dev/null)
           EXTRA="$EXTRA $CAMINC"
