@@ -56,7 +56,10 @@ jobs:
             [ -n "$d" ] && EXTRA="$EXTRA -I$d"
           done
           EXTRA="$EXTRA -Itechpack/audio/asoc -Itechpack/audio/asoc/codecs"
-          EXTRA="$EXTRA -Idrivers/usb/gadget -Idrivers/media/platform/msm/camera/cam_core"
+          EXTRA="$EXTRA -Idrivers/usb/gadget"
+          # 相机树内部互相 include，需要整棵子树（不含通用名 trace.h，不会遮蔽）
+          CAMINC=$(find drivers/media/platform/msm/camera -type d -printf '-I%p ' 2>/dev/null)
+          EXTRA="$EXTRA $CAMINC"
           EXTRA=$(echo $EXTRA | tr ' ' '\n' | sort -u | tr '\n' ' ')
           echo "include dirs: $(echo $EXTRA | wc -w)"
           make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
