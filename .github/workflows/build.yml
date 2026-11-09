@@ -41,7 +41,6 @@ jobs:
         run: |
           cd kernel
           cp ../device_config .config
-          # 4.9.65 配置里带有 4.9.227 树中已不存在的蓝牙 SLIMbus 选项
           ./scripts/config --disable BTFM_SLIM
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
           make olddefconfig
@@ -54,8 +53,10 @@ jobs:
         run: |
           cd kernel
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
+          EXTRA=$(find drivers techpack include arch -name '*_trace.h' -printf '-I%h\n' 2>/dev/null | sort -u | tr '\n' ' ')
+          echo "trace include dirs: $(echo $EXTRA | wc -w)"
           make -j$(nproc) Image \
-            KCFLAGS="-I$PWD/techpack/audio/asoc -I$PWD/techpack/audio/asoc/codecs -I$PWD/drivers/bluetooth"
+            KCFLAGS="$EXTRA -I$PWD/techpack/audio/asoc -I$PWD/techpack/audio/asoc/codecs -I$PWD/drivers/bluetooth"
           ls -l arch/arm64/boot/Image
           df -h /
 
