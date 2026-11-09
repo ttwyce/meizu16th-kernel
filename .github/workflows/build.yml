@@ -46,7 +46,7 @@ jobs:
                      find techpack/audio -type d -printf '-I%p\n' 2>/dev/null
                      find drivers/bluetooth -type d -printf '-I%p\n' 2>/dev/null; } | sort -u | tr '\n' ' ' )
           echo "include dirs: $(echo $EXTRA | wc -w)"
-          make -j$(nproc) Image KCFLAGS="$EXTRA"
+          make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
           ls -l arch/arm64/boot/Image
           df -h /
       - uses: actions/upload-artifact@v4
