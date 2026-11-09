@@ -27,36 +27,25 @@ jobs:
         run: |
           printf '#!/usr/bin/env python3\nimport os, sys\nos.execvp(sys.argv[1], sys.argv[1:])\n' > kernel/scripts/gcc-wrapper.py
           chmod +x kernel/scripts/gcc-wrapper.py
-      - name: Fix missing transitive includes
+      - name: Configure with native m1882 config
         run: |
           cd kernel
-          grep -q "linux/pm_qos.h" drivers/usb/dwc3/dwc3-msm.c || sed -i '0,/^#include/s//#include <linux\/pm_qos.h>\n#include/' drivers/usb/dwc3/dwc3-msm.c
-          head -3 drivers/usb/dwc3/dwc3-msm.c
-      - name: Configure
-        run: |
-          cd kernel
-          cp ../device_config .config
-          ./scripts/config --disable BTFM_SLIM
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
+          ls arch/arm64/configs/vendor/meizu/
+          make sdm845_defconfig
+          cat arch/arm64/configs/vendor/meizu/m1882.config >> .config
+          ./scripts/config --disable BTFM_SLIM
+          ./scripts/config --set-str LOCALVERSION "-perf"
+          ./scripts/config --disable LOCALVERSION_AUTO
           make olddefconfig
+          echo "=== kernelrelease (must be 4.9.65-perf+) ==="
           make -s kernelrelease
+          grep -E "^CONFIG_LOCALVERSION=|^CONFIG_MODVERSIONS|^CONFIG_SMP=|^CONFIG_PREEMPT=" .config
       - name: Build Image
         run: |
           cd kernel
           export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- CC=aarch64-linux-gnu-gcc-9
-          # trace 头：按 TRACE_INCLUDE_FILE 反查目录，但排除通用名 trace（会导致 regmap/trace.h 遮蔽）
-          TH=$(grep -rhoE 'TRACE_INCLUDE_FILE[[:space:]]+[A-Za-z0-9_.]+' --include='*.h' --include='*.c' drivers techpack 2>/dev/null | awk '{print $2}' | sed 's/\.h$//' | sort -u | grep -vx 'trace')
-          EXTRA=""
-          for h in $TH; do
-            d=$(find drivers techpack -name "$h.h" -printf '%h\n' 2>/dev/null | head -1)
-            [ -n "$d" ] && EXTRA="$EXTRA -I$d"
-          done
-          EXTRA="$EXTRA -Itechpack/audio/asoc -Itechpack/audio/asoc/codecs -Idrivers/usb/gadget"
-          CAMINC=$(find drivers/media/platform/msm/camera -type d -printf '-I%p ' 2>/dev/null)
-          EXTRA="$EXTRA $CAMINC"
-          EXTRA=$(echo $EXTRA | tr ' ' '\n' | sort -u | tr '\n' ' ')
-          echo "include dirs: $(echo $EXTRA | wc -w)"
-          make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
+          make -j$(nproc) Image KCFLAGS="-Wno-error -Wno-error=implicit-function-declaration"
           ls -l arch/arm64/boot/Image
           df -h /
       - uses: actions/upload-artifact@v4
