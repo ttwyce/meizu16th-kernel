@@ -55,7 +55,8 @@ jobs:
           EXTRA="$EXTRA -Idrivers/usb/gadget"
           CAMINC=$(find drivers/media/platform/msm/camera -type d -printf '-I%p ' 2>/dev/null)
           EXTRA="$EXTRA $CAMINC"
-          echo "include dirs: $(echo $EXTRA | wc -w)"          make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
+          echo "include dirs: $(echo $EXTRA | wc -w)"
+          make -j$(nproc) Image KCFLAGS="$EXTRA -Wno-error -Wno-error=implicit-function-declaration"
           ls -l arch/arm64/boot/Image
           df -h /
       - uses: actions/upload-artifact@v4
